@@ -12,11 +12,11 @@ async function bootstrap() {
     bodyParser: true,
   })
 
-  const config = app.get(ConfigService)
+  const UI_BASE_URL = process.env.UI_BASE_URL
 
   // Enable CORS for frontend
   app.enableCors({
-    origin: [config.get('ui.baseUrl')],
+    origin: [UI_BASE_URL],
     methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true,
     allowedHeaders: ['Content-Type', 'Authorization', 'Cookie'],
@@ -30,7 +30,7 @@ async function bootstrap() {
   // Swagger configuration
   const options = new DocumentBuilder()
     .setTitle('zkCargoPass API')
-    .setDescription(`The zkCargoPass API service used by [zkCargoPass](${config.get('ui.baseUrl')})`)
+    .setDescription(`The zkCargoPass API service used by [zkCargoPass](${UI_BASE_URL})`)
     .setVersion('1.0')
     .addBearerAuth()
     .addCookieAuth('auth.sessionId')
