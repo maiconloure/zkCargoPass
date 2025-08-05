@@ -1,4 +1,4 @@
-import { Injectable, NestMiddleware } from "@nestjs/common"
+import { Injectable, Logger, NestMiddleware } from "@nestjs/common"
 import { ConfigService } from "@nestjs/config"
 import RedisStore from "connect-redis"
 import express from "express"
@@ -11,13 +11,36 @@ export const SESSION_KEY_NAME = 'auth.grant'
 @Injectable()
 export class GrantMiddleware implements NestMiddleware {
   private readonly router = express.Router()
+  private readonly logger = new Logger(GrantMiddleware.name)
+  
   constructor(private readonly configService: ConfigService) {
     const url = configService.get<string>('REDIS_URL') || configService.get('redis.url')
 
-    const client = redis.createClient({ url: `${url}/0` })
-    client.connect().catch((err) => {
-      console.error('Redis client error:', err)
+    const client = redis.createClient({ 
+      url,
+      socket: {
+        connectTimeout: 60000,
+        reconnectStrategy: (retries) => Math.min(retries * 50, 500)
+      }
     })
+    
+    // Handle Redis client events
+    client.on('error', (err) => {
+      this.logger.error('Redis Grant client error:', err.message)
+    })
+    
+    client.on('connect', () => {
+      this.logger.log('Redis Grant client connected')
+    })
+    
+    client.on('reconnecting', () => {
+      this.logger.log('Redis Grant client reconnecting...')
+    })
+
+    client.connect().catch((err) => {
+      this.logger.error('Redis Grant client connection error:', err.message)
+    })
+    
     const store = new RedisStore({
       client,
       prefix: 'grant:',

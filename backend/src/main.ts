@@ -45,9 +45,38 @@ async function bootstrap() {
 
   app.useGlobalFilters(new HttpExceptionFilter())
 
+  // Handle unhandled promise rejections
+  process.on('unhandledRejection', (reason, promise) => {
+    Logger.error('Unhandled Rejection at:', promise, 'reason:', reason)
+    // Don't exit the process for unhandled rejections, just log them
+  })
+
+  // Handle uncaught exceptions
+  process.on('uncaughtException', (error) => {
+    Logger.error('Uncaught Exception:', error)
+    // For uncaught exceptions, we should exit gracefully
+    process.exit(1)
+  })
+
   const port = process.env.PORT || 3001
   await app.listen(port)
   Logger.log(`🚀 zkCargoPass backend is running on: http://localhost:${port}/`)
+
+  // Graceful shutdown handling
+  const gracefulShutdown = async (signal: string) => {
+    Logger.log(`Received ${signal}. Starting graceful shutdown...`)
+    try {
+      await app.close()
+      Logger.log('Application closed successfully')
+      process.exit(0)
+    } catch (error) {
+      Logger.error('Error during shutdown:', error)
+      process.exit(1)
+    }
+  }
+
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'))
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'))
 }
 
 bootstrap().catch((error) => console.error(error))

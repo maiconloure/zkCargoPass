@@ -1,4 +1,4 @@
-import { Injectable, NestMiddleware } from "@nestjs/common"
+import { Injectable, Logger, NestMiddleware } from "@nestjs/common"
 import { ConfigService } from "@nestjs/config"
 import RedisStore from "connect-redis"
 import cookieParser from "cookie-parser"
@@ -12,13 +12,36 @@ export const SESSION_KEY_NAME = 'auth.sessionId'
 @Injectable()
 export class AuthMiddleware implements NestMiddleware {
   private readonly router = express.Router()
+  private readonly logger = new Logger(AuthMiddleware.name)
+  
   constructor(private readonly configService: ConfigService) {
     const url = configService.get<string>('REDIS_URL') || configService.get('redis.url')
 
-    const client = redis.createClient({ url: `${url}/0` })
-    client.connect().catch((err) => {
-      console.error('Redis client error:', err)
+    const client = redis.createClient({ 
+      url,
+      socket: {
+        connectTimeout: 60000,
+        reconnectStrategy: (retries) => Math.min(retries * 50, 500)
+      }
     })
+    
+    // Handle Redis client events
+    client.on('error', (err) => {
+      this.logger.error('Redis Auth client error:', err.message)
+    })
+    
+    client.on('connect', () => {
+      this.logger.log('Redis Auth client connected')
+    })
+    
+    client.on('reconnecting', () => {
+      this.logger.log('Redis Auth client reconnecting...')
+    })
+
+    client.connect().catch((err) => {
+      this.logger.error('Redis Auth client connection error:', err.message)
+    })
+    
     const store = new RedisStore({
       client,
       prefix: 'session:',

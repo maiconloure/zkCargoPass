@@ -16,6 +16,9 @@ auth:
     sameSite: lax
     maxAge: 2592000000 # expires after a month
 
+zkverify:
+  seed: ${ZK_VERIFY_SEED}
+
 redis:
   url: ${REDIS_URL}
 
