@@ -187,6 +187,9 @@ export default function ValidatePage() {
       const backend = new UltraPlonkBackend(circuit.bytecode)
 
       // Convert hex proof to bytes
+      console.log(proofData)
+      // console.log(proofData.proof)
+
       const proofBytes = new Uint8Array(proofData.proof.match(/.{1,2}/g)?.map(byte => parseInt(byte, 16)) || [])
       if (proofBytes.length === 0) {
         throw new Error("Invalid proof format")

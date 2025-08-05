@@ -61,7 +61,7 @@ async function analyzeWithAI(text: string): Promise<DocumentAnalysis> {
       maxTokens: MAX_TOKENS_PER_REQUEST,
       temperature: 0.1, // Lower temperature for more consistent results
     });
-
+    console.log(text)
     const promptTemplate = new PromptTemplate({
       template: `Analyze the following customs declaration document text and extract relevant information. 
       If any information is not found, use "N/A" for text fields and 0 for numeric fields.
@@ -71,75 +71,77 @@ async function analyzeWithAI(text: string): Promise<DocumentAnalysis> {
       {text}
       
       Extract the information in the following JSON format:
-      {
+      {{
         "di_number": string,
         "registration_date": string (YYYY-MM-DD),
         "customs_clearance_date": string (YYYY-MM-DD),
-        "importer": {
+        "importer": {{
           "cnpj": string,
           "company_name": string,
           "address": string
-        },
-        "shipper": {
+        }},
+        "shipper": {{
           "name": string,
           "country": string
-        },
-        "cargo": {
+        }},
+        "cargo": {{
           "description": string,
           "gross_weight_kg": number,
           "net_weight_kg": number,
           "volume_m3": number,
           "packages": number,
           "packaging_type": string
-        },
-        "transport": {
+        }},
+        "transport": {{
           "modality": string,
           "vessel_name": string,
           "bill_of_lading": string,
           "container_numbers": string[],
           "port_of_loading": string,
           "port_of_discharge": string
-        },
-        "financial": {
+        }},
+        "financial": {{
           "total_declared_value": number,
           "tax_percentage": number,
           "amount_paid": number,
           "incoterm": string,
           "exchange_rate": number,
-          "taxes": {
+          "taxes": {{
             "ii": number,
             "ipi": number,
             "pis": number,
             "cofins": number,
             "icms": number
-          }
-        },
+          }}
+        }},
         "ncm_codes": [
-          {
+          {{
             "ncm": string,
             "description": string,
             "quantity": number,
             "unit": string,
             "unit_value_usd": number
-          }
+          }}
         ],
         "documents": [
-          {
+          {{
             "type": string,
             "number": string,
             "date": string,
             "issuer": string
-          }
+          }}
         ],
         "status": string,
         "observations": string
-      }`,
+      }}`,
       inputVariables: ["text"],
     });
 
     const response = await openai.invoke([
       { role: "user", content: await promptTemplate.format({ text }) }
     ]);
+
+    console.log('AI response:', response.content);
     
     const content = response?.content as string;
     if (!content) return DEFAULT_ANALYSIS;
@@ -189,20 +191,36 @@ export async function POST(request: NextRequest) {
     const file = validationResult.data;
     const analysis = await analyzeWithAI(file.data);
 
-    body.data = { id: new Date().getTime().toString(), verifier: "zk-cargo-pass" };
-    
-    await api.post(`${process.env.NEXT_PUBLIC_API_URL}/document`, 
-      { ...body },
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          'Cookie': request.headers.get('Cookie') || '',
-        },
-        withCredentials: true,
-      }
-    );
+    // Create document in backend and get the actual document ID
+    let documentId = null;
+    try {
+      const documentData = { ...body, data: analysis };
+      const backendUrl = process.env.BACKEND_URL || 'http://localhost:3001';
+      
+      const documentResponse = await api.post(`${backendUrl}/document`, 
+        documentData,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Cookie': request.headers.get('Cookie') || '',
+          },
+          withCredentials: true,
+        }
+      );
+      
+      documentId = documentResponse.data.id;
+    } catch (backendError) {
+      console.error('Failed to create document in backend:', backendError);
+      // Continue with analysis but without backend document ID
+      // The frontend will use a fallback ID
+    }
 
-    return NextResponse.json({ ...file, data: analysis });
+    // Return the analysis data along with the actual document ID from the backend (if available)
+    return NextResponse.json({ 
+      ...file, 
+      data: analysis,
+      documentId: documentId // Will be null if backend creation failed
+    });
   } catch (error) {
     console.error('Document analysis error:', error);
     return NextResponse.json(

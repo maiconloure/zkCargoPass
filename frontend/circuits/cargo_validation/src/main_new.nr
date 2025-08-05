@@ -15,5 +15,6 @@ fn main(
 
 #[test]  
 fn test_example_data() {
+    // Example: 100×400 + 200×20 = 44000
     main(100, 400, 200, 20, 44000);
 }

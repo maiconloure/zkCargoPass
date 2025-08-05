@@ -24,6 +24,17 @@ fn test_main() {
     main(valid_date, current_date, max_days_diff);
 }
 
+#[test]
+fn test_main_example_registration_date() {
+    // Example registration date: 2025-05-15 (day 20223 since 1970-01-01)
+    // Current date: 2025-08-04 (day 20304 since 1970-01-01) 
+    let registration_date = 20223; // 2025-05-15
+    let current_date = 20304;      // 2025-08-04
+    let max_days_diff = 365;       // Allow up to 1 year old documents
+    
+    main(registration_date, current_date, max_days_diff);
+}
+
 
 #[test]
 fn test_main_limit_date() {

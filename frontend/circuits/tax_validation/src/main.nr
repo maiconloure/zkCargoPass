@@ -1,38 +1,57 @@
-// Circuit to verify if the amount paid in taxes is the right percentage of the total amount declared
-fn main(total_declared_value: u64, amount_paid: u64, tax_percentage: pub u64) {
-    // Calculate the minimum amount of taxes to be paid 
-    // To avoid divisions the amount paid is multiplied by 100
-    let amount_to_pay: u64 = total_declared_value * tax_percentage;
+// Circuit to verify if the total amount paid in taxes equals the sum of individual tax components
+// Based on example: ii(9000) + ipi(3000) + pis(800) + cofins(3600) + icms(6500) = 22900
+fn main(
+    // Individual tax components (private)
+    ii: u64,
+    ipi: u64, 
+    pis: u64,
+    cofins: u64,
+    icms: u64,
+    // Total amount paid (public for verification)
+    total_amount_paid: pub u64
+) {
+    // Calculate the sum of all tax components
+    let calculated_total: u64 = ii + ipi + pis + cofins + icms;
 
-    assert(amount_paid * 100 >= amount_to_pay);
+    // Verify that the declared total matches the sum of components
+    assert(calculated_total == total_amount_paid);
 }
 
 #[test]
-fn test_main_exact_min_percentage() {
-    // Test with the exact percentage paid in taxes (15%)
-    let total_declared_value = 1000000; // Total amount declared: $10,000.00
-    let amount_paid = 150000;           // Amount paid in taxes:  $1,500.00
-    let tax_percentage = 15;            // Taxes: 15%
+fn test_main_example_data() {
+    // Test with example data from the JSON
+    let ii = 9000;
+    let ipi = 3000;
+    let pis = 800;
+    let cofins = 3600;
+    let icms = 6500;
+    let total_amount_paid = 22900; // Sum should equal 22900
 
-    main(total_declared_value, amount_paid, tax_percentage);
-}
-
-#[test]
-fn test_main_above_min_percentage() {
-    // Test with a greater percentage paid in taxes (20%)
-    let total_declared_value = 1000000; // Total amount declared: $10,000.00
-    let amount_paid = 200000;           // Amount paid in taxes:  $2,000.00
-    let tax_percentage = 15;            // Taxes: 15%
-
-    main(total_declared_value, amount_paid, tax_percentage);
+    main(ii, ipi, pis, cofins, icms, total_amount_paid);
 }
 
 #[test(should_fail)]
-fn test_main_below_min_percentage() {
-    // Test with a lower percentage paid in taxes (10%)
-    let total_declared_value = 1000000; // Total amount declared: $10,000.00
-    let amount_paid = 100000;           // Amount paid in taxes:  $1,000.00
-    let tax_percentage = 15;            // Taxes: 15%
+fn test_main_incorrect_total() {
+    // Test with incorrect total (should fail)
+    let ii = 9000;
+    let ipi = 3000;
+    let pis = 800;
+    let cofins = 3600;
+    let icms = 6500;
+    let total_amount_paid = 20000; // Incorrect total - should be 22900
 
-    main(total_declared_value, amount_paid, tax_percentage);
+    main(ii, ipi, pis, cofins, icms, total_amount_paid);
+}
+
+#[test]
+fn test_main_different_values() {
+    // Test with different tax values
+    let ii = 5000;
+    let ipi = 2000;
+    let pis = 500;
+    let cofins = 2000;
+    let icms = 4000;
+    let total_amount_paid = 13500; // Sum = 13500
+
+    main(ii, ipi, pis, cofins, icms, total_amount_paid);
 }
