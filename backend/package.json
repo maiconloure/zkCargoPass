@@ -1,7 +1,6 @@
 {
   "name": "zkcargopass-backend",
   "license": "MIT",
-  "author": "Mateus Holanda",
   "description": "NestJS backend zkCargoPass app",
   "version": "0.0.1",
   "private": true,
@@ -27,7 +26,7 @@
     "seed": "ts-node prisma/seed.ts"
   },
   "dependencies": {
-    "@aztec/bb.js": "^1.2.1",
+    "@aztec/bb.js": "0.72.1",
     "@nestjs/common": "^10.0.0",
     "@nestjs/config": "^3.1.1",
     "@nestjs/core": "^10.0.0",
@@ -52,7 +51,7 @@
     "redis": "^4.7.0",
     "reflect-metadata": "^0.1.13",
     "rxjs": "^7.8.1",
-    "zkverifyjs": "^0.16.4"
+    "zkverifyjs": "0.12.1"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.0.0",

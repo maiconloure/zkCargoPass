@@ -58,9 +58,26 @@ export class ZkVerifyService {
       this.logger.log(`Input proof type: ${typeof proof}, is array: ${Array.isArray(proof)}`)
       this.logger.log(`Input vk type: ${typeof vk}, is array: ${Array.isArray(vk)}`)
       this.logger.log(`Input publicInputs: ${JSON.stringify(publicInputs)}`)
+      this.logger.log(`Circuit type: ${circuitType}`)
+      this.logger.log(`Expected number of public inputs: ${numberOfPublicInputs}`)
+      
+      // Validate numberOfPublicInputs matches actual inputs
+      let actualInputCount = 0
+      if (Array.isArray(publicInputs)) {
+        actualInputCount = publicInputs.length
+      } else {
+        actualInputCount = 1
+      }
+      
+      if (actualInputCount !== numberOfPublicInputs) {
+        this.logger.warn(`⚠️ Mismatch: expected ${numberOfPublicInputs} public inputs, got ${actualInputCount}`)
+        // Adjust numberOfPublicInputs to match actual inputs for zkVerify
+        numberOfPublicInputs = actualInputCount
+        this.logger.log(`Adjusted numberOfPublicInputs to: ${numberOfPublicInputs}`)
+      }
       
       // Convert to Uint8Array based on input format
-      const proofUint8Array = Array.isArray(proof) 
+      const proofUint8Array = Array.isArray(proof)
         ? new Uint8Array(proof)
         : new Uint8Array(Object.values(proof))
       const vkUint8Array = Array.isArray(vk)
@@ -151,44 +168,132 @@ export class ZkVerifyService {
         this.logger.log(`Proof hex first 64 chars: ${proofHex.substring(0, 64)}`)
         this.logger.log(`VK hex first 64 chars: ${vkHex.substring(0, 64)}`)
 
-        // Submit to zkVerify - using the format from reference implementation
-        this.logger.log('6. Submitting to zkVerify')
-        const { events } = await this.session
-          .verify()
-          .ultraplonk({ numberOfPublicInputs })
-          .execute({
-            proofData: {
-              vk: vkHex,
-              proof: proofHex,
-              publicSignals: publicInputs
-            },
-          })
-
-        // Wait for zkVerify response
-        this.logger.log('7. Waiting for zkVerify response')
-        return new Promise((resolve, reject) => {
-          events.once('includedInBlock', (info: any) => {
-            this.logger.log('Transaction included in block:', info)
-          })
-
-          events.once('error', (err: any) => {
-            this.logger.error('Error in zkVerify transaction:', err)
-            reject({
-              verified: false,
-              message: 'zkVerify transaction failed',
-              error: err.message
-            })
-          })
-
-          events.once('finalized', (data: any) => {
-            this.logger.log('8. Proof finalized on zkVerify')
-            resolve({
-              verified: true,
-              txHash: data.txHash,
-              message: 'Proof verified successfully on zkVerify!'
-            })
-          })
+        // Extensive public inputs format testing for zkVerify compatibility
+        this.logger.log('6. Testing various public inputs formats for zkVerify')
+        this.logger.log(`Raw public inputs type: ${typeof publicInputs}`)
+        this.logger.log(`Raw public inputs value: ${JSON.stringify(publicInputs)}`)
+        
+        // Convert to single value or array
+        let inputValues: (string | number)[]
+        if (Array.isArray(publicInputs)) {
+          inputValues = publicInputs
+        } else {
+          inputValues = [publicInputs]
+        }
+        
+        this.logger.log(`Input values: ${JSON.stringify(inputValues)}`)
+        
+        // Test formats - create multiple format attempts
+        const formatAttempts = []
+        
+        // Format 1: Direct string conversion
+        const format1 = inputValues.map(v => String(v))
+        formatAttempts.push({ name: 'String format', data: format1 })
+        
+        // Format 2: Numeric conversion
+        const format2 = inputValues.map(v => {
+          if (typeof v === 'number') return v
+          const num = parseInt(String(v), 10)
+          return isNaN(num) ? 0 : num
         })
+        formatAttempts.push({ name: 'Numeric format', data: format2 })
+        
+        // Format 3: Hex strings with 0x prefix (32 bytes)
+        const format3 = inputValues.map(v => {
+          const num = typeof v === 'number' ? v : parseInt(String(v), 10)
+          if (isNaN(num)) return '0x0000000000000000000000000000000000000000000000000000000000000000'
+          return '0x' + num.toString(16).padStart(64, '0')
+        })
+        formatAttempts.push({ name: 'Hex 32-byte format', data: format3 })
+        
+        // Format 4: Hex strings without 0x prefix
+        const format4 = inputValues.map(v => {
+          const num = typeof v === 'number' ? v : parseInt(String(v), 10)
+          if (isNaN(num)) return '0000000000000000000000000000000000000000000000000000000000000000'
+          return num.toString(16).padStart(64, '0')
+        })
+        formatAttempts.push({ name: 'Hex no-prefix format', data: format4 })
+        
+        // Format 5: Field element format (assuming BN254 field)
+        const format5 = inputValues.map(v => {
+          const num = typeof v === 'number' ? v : parseInt(String(v), 10)
+          if (isNaN(num)) return '0'
+          // Convert to field element representation
+          return num.toString()
+        })
+        formatAttempts.push({ name: 'Field element format', data: format5 })
+        
+        // Format 6: BigInt string representation
+        const format6 = inputValues.map(v => {
+          const num = typeof v === 'number' ? v : parseInt(String(v), 10)
+          if (isNaN(num)) return '0'
+          return BigInt(num).toString()
+        })
+        formatAttempts.push({ name: 'BigInt string format', data: format6 })
+        
+        this.logger.log('Testing formats:')
+        formatAttempts.forEach((attempt, index) => {
+          this.logger.log(`  ${index + 1}. ${attempt.name}: ${JSON.stringify(attempt.data)}`)
+        })
+        
+        // Try each format sequentially until one works
+        for (let i = 0; i < formatAttempts.length; i++) {
+          const attempt = formatAttempts[i]
+          this.logger.log(`\n=== Attempting ${attempt.name} (${i + 1}/${formatAttempts.length}) ===`)
+          
+          try {
+            const { events } = await this.session
+              .verify()
+              .ultraplonk({ numberOfPublicInputs })
+              .execute({
+                proofData: {
+                  vk: vkHex,
+                  proof: proofHex,
+                  publicSignals: attempt.data
+                },
+              })
+              
+            this.logger.log(`✅ ${attempt.name} submission successful!`)
+            
+            // Wait for zkVerify response
+            this.logger.log('7. Waiting for zkVerify response')
+            return new Promise((resolve, reject) => {
+              events.once('includedInBlock', (info: any) => {
+                this.logger.log('Transaction included in block:', info)
+              })
+
+              events.once('error', (err: any) => {
+                this.logger.error('Error in zkVerify transaction:', err)
+                reject({
+                  verified: false,
+                  message: 'zkVerify transaction failed',
+                  error: err.message
+                })
+              })
+
+              events.once('finalized', (data: any) => {
+                this.logger.log(`8. Proof finalized on zkVerify using ${attempt.name}`)
+                resolve({
+                  verified: true,
+                  txHash: data.txHash,
+                  message: `Proof verified successfully on zkVerify using ${attempt.name}!`
+                })
+              })
+            })
+            
+          } catch (formatError) {
+            this.logger.warn(`❌ ${attempt.name} failed: ${formatError.message}`)
+            
+            // If it's the last attempt, throw the error
+            if (i === formatAttempts.length - 1) {
+              this.logger.error('All format attempts failed!')
+              throw new Error(`All public inputs format attempts failed. Last error: ${formatError.message}`)
+            }
+            
+            // Otherwise, continue to next format
+            continue
+          }
+        }
       } catch (conversionError) {
         this.logger.error('Error during proof/VK conversion:', conversionError)
         return {

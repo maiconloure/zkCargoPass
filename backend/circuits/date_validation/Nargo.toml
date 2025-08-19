@@ -1,6 +1,6 @@
 [package]
 name = "date_validation"
 type = "bin"
-authors = ["Mateus Holanda"]
+authors = ["Maicon Lourenço"]
 
 [dependencies]

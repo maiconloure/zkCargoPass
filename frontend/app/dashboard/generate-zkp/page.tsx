@@ -96,6 +96,7 @@ export default function GenerateZKPPage() {
   const [selectedCircuitKey, setSelectedCircuitKey] = useState<string>(CIRCUITS[0].key)
   const [generating, setGenerating] = useState(false)
   const [generatedProof, setGeneratedProof] = useState<string>("")
+  const [documentId, setDocumentId] = useState<string>("") // Add state for documentId
   const [verifying, setVerifying] = useState(false)
   const [verificationResult, setVerificationResult] = useState<any>(null)
   const [proofData, setProofData] = useState<{
@@ -248,6 +249,7 @@ export default function GenerateZKPPage() {
     setUploadSuccess(false)
     setError("")
     setGeneratedProof("")
+    setDocumentId("") // Reset documentId
     setVerificationResult(null)
     setProofData({ proof: null, vk: null, publicInputs: null })
     if (fileInputRef.current) {
@@ -304,7 +306,9 @@ export default function GenerateZKPPage() {
       console.log(analysisData)
       // Use the document ID returned from the backend instead of generating one locally
       const documentId = analysisData.documentId || Date.now().toString() // Fallback to timestamp if not provided
-
+      console.log("Document ID from backend:", documentId)
+      setDocumentId(documentId) // Store documentId in state for use in download function
+      
       const documents = JSON.parse(localStorage.getItem("zk-cargo-pass-documents") || "[]")
       const newDocument = {
         id: documentId, // Use the backend-provided document ID
@@ -437,7 +441,7 @@ export default function GenerateZKPPage() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `zk-proof-${file?.name}-${new Date().getTime()}.json`
+    a.download = `zk-proof-${file?.name}-${documentId || new Date().getTime()}.json`
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)

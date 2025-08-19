@@ -1,6 +1,6 @@
 [package]
 name = "tax_validation"
 type = "bin"
-authors = ["Mateus Holanda"]
+authors = ["Maicon Lourenço"]
 
 [dependencies]

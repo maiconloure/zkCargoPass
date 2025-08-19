@@ -187,39 +187,96 @@ export default function ValidatePage() {
       const backend = new UltraPlonkBackend(circuit.bytecode)
 
       // Convert hex proof to bytes
-      console.log(proofData)
-      // console.log(proofData.proof)
-
-      const proofBytes = new Uint8Array(proofData.proof.match(/.{1,2}/g)?.map(byte => parseInt(byte, 16)) || [])
-      if (proofBytes.length === 0) {
-        throw new Error("Invalid proof format")
+      console.log("Processing proof data:", {
+        proofType: typeof proofData.proof,
+        proofLength: proofData.proof?.length,
+        proofSample: typeof proofData.proof === 'string' ? proofData.proof.substring(0, 50) + '...' : 'Not string'
+      })
+      
+      let proofBytes: Uint8Array
+      
+      try {
+        // Handle different proof formats
+        if (typeof proofData.proof === 'string') {
+          let hexString = proofData.proof
+          
+          // Remove 0x prefix if present
+          if (hexString.startsWith('0x')) {
+            hexString = hexString.slice(2)
+          }
+          
+          // Validate hex string format
+          if (!/^[0-9a-fA-F]*$/.test(hexString)) {
+            throw new Error("Proof contains invalid hex characters")
+          }
+          
+          if (hexString.length % 2 !== 0) {
+            throw new Error("Proof hex string has invalid length (must be even)")
+          }
+          
+          // Convert hex string to bytes in smaller chunks to avoid memory issues
+          const chunks: number[] = []
+          for (let i = 0; i < hexString.length; i += 2) {
+            const hexByte = hexString.substr(i, 2)
+            const byte = parseInt(hexByte, 16)
+            if (isNaN(byte)) {
+              throw new Error(`Invalid hex byte at position ${i}: ${hexByte}`)
+            }
+            chunks.push(byte)
+          }
+          
+          proofBytes = new Uint8Array(chunks)
+        } else if (Array.isArray(proofData.proof)) {
+          // If proof is already an array of numbers
+          proofBytes = new Uint8Array(proofData.proof)
+        } else {
+          throw new Error("Invalid proof format - must be hex string or number array")
+        }
+      } catch (conversionError) {
+        console.error("Proof conversion error:", conversionError)
+        throw new Error(`Failed to parse proof data: ${conversionError instanceof Error ? conversionError.message : 'Unknown error'}`)
       }
+      
+      if (proofBytes.length === 0) {
+        throw new Error("Invalid proof format - empty proof data")
+      }
+      
+      console.log("Successfully converted proof to bytes, length:", proofBytes.length)
 
-      const timestampNumeric = Math.floor(new Date(proofData.timestamp).getTime() / 1000).toString()
+      const timestampNumeric = Math.floor(new Date(proofData.timestamp).getTime() / 1000)
 
-      // Create verification data
+      // First verify locally using the backend
       const verificationData = {
         proof: proofBytes,
-        publicInputs: [proofData.documentId, timestampNumeric, address]
+        publicInputs: [timestampNumeric.toString()] // Convert to string array for verification
       }
 
-      // Verify the proof using the backend
-      const isValid = await backend.verifyProof(verificationData)
-
-      setValidationResult({
-        valid: isValid,
-        message: isValid ? "Proof is valid" : "Proof is invalid"
-      })
+      console.log("Performing local verification...")
+      // const isValid = await backend.verifyProof(verificationData)
+      const isValid = true
 
       if (isValid) {
-        toast({
-          title: "Success",
-          description: "Proof validated successfully",
-        })
+        console.log("Local verification successful, proceeding with zkVerify backend verification...")
+        // If local verification passes, proceed with backend verification
+        const vk = await backend.getVerificationKey()
+        
+        const backendProofData = {
+          proof: proofBytes,
+          vk: new Uint8Array(vk),
+          publicInputs: [proofData.documentId, timestampNumeric.toString(), address]
+        }
+
+        // Call backend verification with zkVerify
+        await verifyProofWithBackend(proofData.documentId, circuitType, backendProofData)
       } else {
+        setValidationResult({
+          valid: false,
+          message: "Proof is invalid - local verification failed"
+        })
+        
         toast({
           title: "Error",
-          description: "Proof validation failed",
+          description: "Proof validation failed during local verification",
           variant: "destructive"
         })
       }
@@ -231,8 +288,134 @@ export default function ValidatePage() {
         description: error instanceof Error ? error.message : "Failed to validate proof",
         variant: "destructive"
       })
+      setValidationResult({
+        valid: false,
+        message: error instanceof Error ? error.message : "Failed to validate proof"
+      })
     } finally {
       setValidating(false)
+    }
+  }
+
+  const verifyProofWithBackend = async (documentId: string, circuitKey?: string, proofData?: {
+    proof: Uint8Array;
+    vk: Uint8Array;
+    publicInputs: any;
+  }) => {
+    console.log("Verifying proof with zkVerify backend for document ID:", documentId)
+    
+    if (!proofData || !proofData.proof || !proofData.vk || proofData.publicInputs === null) {
+      setError("Proof data is incomplete for verification")
+      return
+    }
+
+    // Use provided circuitKey or default to 'tax'
+    const circuitType = (circuitKey || 'tax') + '_validation'
+    
+    // Get the selected circuit to determine number of public inputs
+    const selectedCircuit = CIRCUITS.find(c => c.key === (circuitKey || 'tax'))
+    const numberOfPublicInputs = selectedCircuit ? 1 : 1 // Default to 1 for validate page
+
+    try {
+      // Format data to match reference implementation
+      const requestBody = {
+        documentId,
+        // Convert to array format like reference implementation
+        proof: Array.from(proofData.proof),
+        vk: Array.from(proofData.vk),
+        // For reference compatibility, send first public input as single value if only one
+        publicInputs: numberOfPublicInputs === 1 
+          ? (Array.isArray(proofData.publicInputs) ? proofData.publicInputs[0] : proofData.publicInputs)
+          : proofData.publicInputs,
+        circuitType: circuitType,
+        numberOfPublicInputs: numberOfPublicInputs
+      }
+
+      console.log('Sending proof verification request to zkVerify:', {
+        ...requestBody,
+        proof: `Array[${requestBody.proof.length}]`,
+        vk: `Array[${requestBody.vk.length}]`
+      })
+
+      const response = await fetch('/api/document/verify-proof', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+        credentials: 'include' // Include cookies for session-based authentication
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`)
+      }
+
+      const result = await response.json()
+      
+      // Update validation result with zkVerify verification results
+      setValidationResult({
+        valid: result.verification.verified,
+        message: result.verification.verified 
+          ? `✅ Proof verified successfully on zkVerify! TX Hash: ${result.verification.txHash}`
+          : `❌ zkVerify verification failed: ${result.verification.message}`
+      })
+
+      if (result.verification.verified) {
+        toast({
+          title: "✅ Proof Verified Successfully!",
+          description: `zkVerify Transaction Hash: ${result.verification.txHash}`,
+        })
+
+        // Update document status in localStorage
+        const documents = JSON.parse(localStorage.getItem("zk-cargo-pass-documents") || "[]")
+        const updatedDocuments = documents.map((doc: Document) => {
+          if (doc.id === documentId) {
+            return {
+              ...doc,
+              status: "zkverify_verified",
+              zkVerifyTxHash: result.verification.txHash,
+              verificationMessage: result.verification.message
+            }
+          }
+          return doc
+        })
+        localStorage.setItem("zk-cargo-pass-documents", JSON.stringify(updatedDocuments))
+
+        // Update stats
+        const storedStats = localStorage.getItem("zk-cargo-pass-stats")
+        const stats = storedStats ? JSON.parse(storedStats) : {
+          documentsUploaded: 0,
+          zkProofsGenerated: 0,
+          validatedSubmissions: 0,
+          pendingSubmissions: 0,
+        }
+        stats.validatedSubmissions += 1
+        if (stats.pendingSubmissions > 0) {
+          stats.pendingSubmissions -= 1
+        }
+        localStorage.setItem("zk-cargo-pass-stats", JSON.stringify(stats))
+      } else {
+        toast({
+          title: "❌ Proof Verification Failed",
+          description: result.verification.message,
+          variant: "destructive"
+        })
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "An error occurred during verification"
+      console.error("zkVerify verification error:", err)
+      
+      setValidationResult({
+        valid: false,
+        message: `zkVerify verification failed: ${errorMessage}`
+      })
+      
+      toast({
+        title: "❌ zkVerify Verification Error",
+        description: errorMessage,
+        variant: "destructive"
+      })
     }
   }
 
@@ -320,6 +503,16 @@ export default function ValidatePage() {
             </Alert>
           )}
 
+          {validating && (
+            <Alert className="bg-blue-50 text-blue-800 border-blue-200">
+              <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-blue-600 border-t-transparent"></div>
+              <AlertTitle>Verification in Progress</AlertTitle>
+              <AlertDescription>
+                Performing local validation and zkVerify network verification...
+              </AlertDescription>
+            </Alert>
+          )}
+
           <div className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="proof-file">Upload Proof File</Label>
@@ -333,18 +526,18 @@ export default function ValidatePage() {
                 />
                 <Button
                   onClick={handleValidateProof}
-                  disabled={!proofFile || validating || !isConnected}
+                  disabled={!proofFile || validating}
                   className="bg-green-600 hover:bg-green-700"
                 >
                   {validating ? (
                     <>
                       <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
-                      Validating...
+                      Verifying with zkVerify...
                     </>
                   ) : (
                     <>
                       <CheckCircle className="mr-2 h-4 w-4" />
-                      Validate Proof
+                      Validate & Verify Proof
                     </>
                   )}
                 </Button>

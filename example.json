@@ -1,0 +1,63 @@
+{
+  "di_number": "23/1234567-1",
+  "registration_date": "2025-05-15",
+  "customs_clearance_date": "N/A",
+  "importer": {
+    "cnpj": "12.345.678/0001-90",
+    "company_name": "TechImport Brasil LTDA",
+    "address": "Av. das Nações Unidas, 10000 - São Paulo/SP - CEP 04578-000"
+  },
+  "shipper": {
+    "name": "Shenzhen Electronic Co., Ltd",
+    "country": "China"
+  },
+  "cargo": {
+    "description": "Notebook com tela de 15.6 polegadas, Fonte de alimentação para notebook",
+    "gross_weight_kg": 1200,
+    "net_weight_kg": 800,
+    "volume_m3": 5,
+    "packages": 0,
+    "packaging_type": "N/A"
+  },
+  "transport": {
+    "modality": "Marítimo",
+    "vessel_name": "N/A",
+    "bill_of_lading": "MAEU123456789",
+    "container_numbers": [],
+    "port_of_loading": "N/A",
+    "port_of_discharge": "Porto de Santos/SP"
+  },
+  "financial": {
+    "total_declared_value": 44000,
+    "tax_percentage": 0,
+    "amount_paid": 22900,
+    "incoterm": "N/A",
+    "exchange_rate": 0,
+    "taxes": {
+      "ii": 9000,
+      "ipi": 3000,
+      "pis": 800,
+      "cofins": 3600,
+      "icms": 6500
+    }
+  },
+  "ncm_codes": [
+    {
+      "ncm": "8471.30.12",
+      "description": "Notebook com tela de 15.6 polegadas",
+      "quantity": 100,
+      "unit": "unidades",
+      "unit_value_usd": 400
+    },
+    {
+      "ncm": "8473.30.42",
+      "description": "Fonte de alimentação para notebook",
+      "quantity": 200,
+      "unit": "unidades",
+      "unit_value_usd": 20
+    }
+  ],
+  "documents": [],
+  "status": "N/A",
+  "observations": "N/A"
+}
